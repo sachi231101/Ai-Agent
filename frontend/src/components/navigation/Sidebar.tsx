@@ -36,10 +36,28 @@ export function Sidebar() {
       route: ROUTES.MARKETPLACE,
     },
     {
+      id: "workflows",
+      label: "Workflows",
+      icon: Activity,
+      route: ROUTES.WORKFLOWS,
+    },
+    {
+      id: "blueprint",
+      label: "Blueprint & Specs",
+      icon: Sparkles,
+      route: ROUTES.BLUEPRINT,
+    },
+    {
       id: "integrations",
       label: "Integrations",
       icon: Layers,
       route: ROUTES.INTEGRATIONS,
+    },
+    {
+      id: "knowledge",
+      label: "Knowledge",
+      icon: BookOpen,
+      route: ROUTES.KNOWLEDGE,
     },
     {
       id: "analytics",
