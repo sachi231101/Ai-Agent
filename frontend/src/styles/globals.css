@@ -1,0 +1,110 @@
+@import "./theme.css";
+@import "./animations.css";
+
+/* Core app global overrides */
+html, body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: var(--sans);
+  background-color: var(--background);
+  color: var(--foreground);
+  overflow-x: hidden;
+}
+
+/* Headings compact negative tracking */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--sans);
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  letter-spacing: -0.04em;
+}
+
+/* ─── Glassmorphism Design Utilities ────────────────────────────────────────── */
+
+/* Glass Level 1 */
+.bg-glass {
+  background-color: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Glass Level 2 (Hover/Active) */
+.bg-glass-hover:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(173, 198, 255, 0.4); /* glow primary blue */
+  box-shadow: 0 0 20px rgba(173, 198, 255, 0.15);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The Aether Card Top-Left Internal Light Leak */
+.aether-card {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.aether-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+}
+
+.aether-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+}
+
+/* Ambient Glows */
+.ambient-glow-purple {
+  filter: blur(80px);
+  background: radial-gradient(circle, rgba(233, 179, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+.ambient-glow-blue {
+  filter: blur(80px);
+  background: radial-gradient(circle, rgba(173, 198, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+/* Pulsing Status Dot */
+.status-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #e9b3ff; /* secondary purple */
+  box-shadow: 0 0 8px #e9b3ff;
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(233, 179, 255, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(233, 179, 255, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(233, 179, 255, 0);
+  }
+}

@@ -1,0 +1,67 @@
+/* Micro-animations and transitions */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Shimmer Sweep Animation */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.1) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: translateX(-100%);
+  animation: shimmer 2.5s infinite;
+  pointer-events: none;
+}
+
+/* Trace Loader (Thin gradient perimeter tracing line) */
+@keyframes trace-loop {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.trace-loader {
+  position: relative;
+  height: 2px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.trace-loader::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  animation: trace-loop 1.5s infinite ease-in-out;
+}

@@ -1,0 +1,36 @@
+import { Router } from 'express';
+import { authRoutes } from '@modules/auth';
+import { usersRoutes } from '@modules/users';
+import { organizationsRoutes } from '@modules/organizations';
+import { agentsRoutes } from '@modules/agents';
+import { aiRoutes } from '@modules/ai';
+import { workflowsRoutes } from '@modules/workflows';
+import { blueprintRoutes } from '@modules/blueprint';
+import { deploymentsRoutes } from '@modules/deployments';
+import { templatesRoutes } from '@modules/templates';
+import { marketplaceRoutes } from '@modules/marketplace';
+import { integrationRoutes } from '@modules/integrations';
+import { knowledgeRoutes } from '@modules/knowledge';
+import { analyticsRoutes } from '@modules/analytics';
+import { notificationsRoutes } from '@modules/notifications';
+import { billingRoutes } from '@modules/billing';
+import { storageRoutes } from '@modules/storage';
+
+export const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/users', usersRoutes);
+router.use('/organizations', organizationsRoutes);
+router.use('/agents', agentsRoutes);
+router.use('/ai', aiRoutes);
+router.use('/workflows', workflowsRoutes);
+router.use('/blueprints', blueprintRoutes);
+router.use('/deployments', deploymentsRoutes);
+router.use('/templates', templatesRoutes);
+router.use('/marketplace', marketplaceRoutes);
+router.use('/integrations', integrationRoutes);
+router.use('/knowledge', knowledgeRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/billing', billingRoutes);
+router.use('/storage', storageRoutes);

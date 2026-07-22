@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Users & Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  password       String
+  role           String   @default("MEMBER")
+  avatar         String?
+  refreshToken   String?
+  organizationId String?
+
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  agents         Agent[]
+  workflows      Workflow[]
+  deployments    Deployment[]
+  notifications  Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// ─── Organizations ────────────────────────────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logo        String?
+  plan        String   @default("FREE")
+
+  members     User[]
+  agents      Agent[]
+  workflows   Workflow[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("organizations")
+}
+
+// ─── Agents ───────────────────────────────────────────────────────────────────
+
+model Agent {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  status         String   @default("DRAFT")
+  provider       String   @default("openai")
+  model          String   @default("gpt-4o")
+  systemPrompt   String?  @db.Text
+  config         Json     @default("{}")
+  tools          Json     @default("[]")
+  userId         String
+  organizationId String?
+
+  user         User          @relation(fields: [userId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  deployments  Deployment[]
+  workflows    WorkflowAgent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agents")
+}
+
+// ─── Workflows ────────────────────────────────────────────────────────────────
+
+model Workflow {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  status         String   @default("DRAFT")
+  definition     Json
+  userId         String
+  organizationId String?
+
+  user         User            @relation(fields: [userId], references: [id])
+  organization Organization?  @relation(fields: [organizationId], references: [id])
+  agents       WorkflowAgent[]
+  runs         WorkflowRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("workflows")
+}
+
+model WorkflowAgent {
+  workflowId String
+  agentId    String
+  order      Int    @default(0)
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  agent    Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([workflowId, agentId])
+  @@map("workflow_agents")
+}
+
+model WorkflowRun {
+  id         String   @id @default(cuid())
+  workflowId String
+  status     String   @default("PENDING")
+  input      Json?
+  output     Json?
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  workflow Workflow @relation(fields: [workflowId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("workflow_runs")
+}
+
+// ─── Deployments ──────────────────────────────────────────────────────────────
+
+model Deployment {
+  id       String   @id @default(cuid())
+  agentId  String
+  userId   String
+  status   String   @default("DEPLOYING")
+  url      String?
+  config   Json     @default("{}")
+  logs     Json     @default("[]")
+
+  agent Agent @relation(fields: [agentId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("deployments")
+}
+
+// ─── Templates & Marketplace ──────────────────────────────────────────────────
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  config      Json
+  isPublic    Boolean  @default(false)
+  price       Float    @default(0)
+  downloads   Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("templates")
+}
+
+// ─── Knowledge Base ───────────────────────────────────────────────────────────
+
+model KnowledgeBase {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String
+  content     String?  @db.Text
+  embedding   Bytes?
+  metadata    Json     @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("knowledge_bases")
+}
+
+// ─── Integrations ─────────────────────────────────────────────────────────────
+
+model Integration {
+  id        String   @id @default(cuid())
+  provider  String
+  status    String   @default("DISCONNECTED")
+  config    Json     @default("{}")
+  userId    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@map("integrations")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id      String   @id @default(cuid())
+  userId  String
+  title   String
+  message String
+  type    String   @default("INFO")
+  read    Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}

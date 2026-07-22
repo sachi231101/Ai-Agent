@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius-sm: 0.25rem;
+  --radius-default: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* Palette: Aetheric Intelligence (Strict Dark Mode) */
+  --background: #141313;
+  --foreground: #e5e2e1;
+  
+  --card: #1c1b1b;
+  --card-foreground: #e5e2e1;
+  
+  --popover: #141313;
+  --popover-foreground: #e5e2e1;
+  
+  --primary: #adc6ff;
+  --primary-foreground: #002e69;
+  
+  --secondary: #e9b3ff;
+  --secondary-foreground: #510074;
+  
+  --muted: #2a2a2a;
+  --muted-foreground: #c1c6d7;
+  
+  --accent: #201f1f;
+  --accent-foreground: #e5e2e1;
+  
+  --destructive: #ffb4ab;
+  --destructive-foreground: #690005;
+  
+  --border: #414755;
+  --input: #1c1b1b;
+  --ring: #adc6ff;
+
+  --sidebar: #0e0e0e;
+  --sidebar-foreground: #e5e2e1;
+  --sidebar-border: #201f1f;
+  --sidebar-ring: #adc6ff;
+  
+  --sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.dark {
+  /* Strictly dark-mode, matching :root */
+  --background: #141313;
+  --foreground: #e5e2e1;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  --radius-sm: var(--radius-sm);
+  --radius-default: var(--radius-default);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+}
