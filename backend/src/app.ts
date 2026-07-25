@@ -14,7 +14,7 @@ const app: Application = express();
 
 // ─── Security ────────────────────────────────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: appConfig.corsOrigin, credentials: true }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(rateLimit({
   windowMs: appConfig.rateLimit.windowMs,
   max: appConfig.rateLimit.max,

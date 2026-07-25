@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import conversationRoutes from './conversation.routes';
 import { authRoutes } from '@modules/auth';
 import { usersRoutes } from '@modules/users';
 import { organizationsRoutes } from '@modules/organizations';
@@ -18,6 +19,9 @@ import { storageRoutes } from '@modules/storage';
 
 export const router = Router();
 
+// Mount AI Conversation Engine Routes
+router.use('/', conversationRoutes);
+
 router.use('/auth', authRoutes);
 router.use('/users', usersRoutes);
 router.use('/organizations', organizationsRoutes);
@@ -34,3 +38,4 @@ router.use('/analytics', analyticsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/billing', billingRoutes);
 router.use('/storage', storageRoutes);
+

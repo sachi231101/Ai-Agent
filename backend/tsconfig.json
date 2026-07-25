@@ -23,7 +23,17 @@
       "@socket/*": ["./src/socket/*"],
       "@jobs/*": ["./src/jobs/*"],
       "@queue/*": ["./src/queue/*"],
-      "@cron/*": ["./src/cron/*"]
+      "@cron/*": ["./src/cron/*"],
+      "@controllers/*": ["./src/controllers/*"],
+      "@routes/*": ["./src/routes/*"],
+      "@middlewares/*": ["./src/middlewares/*"],
+      "@services/*": ["./src/services/*"],
+      "@prompts/*": ["./src/prompts/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@validators/*": ["./src/validators/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@types/*": ["./src/types/*"],
+      "@errors/*": ["./src/errors/*"]
     }
   },
   "include": ["src/**/*"],

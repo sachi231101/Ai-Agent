@@ -1,495 +1,393 @@
-import { useState, useCallback, useRef } from 'react';
+/**
+ * useStudioEngine — AI Conversation Engine Hook
+ *
+ * This is the single source of truth for all Studio AI Conversation state.
+ * It replaces the previous local mock implementation with real backend API calls.
+ *
+ * Architecture:
+ *   StudioCanvas (View) → useStudioEngine (State & Logic) → conversationApi (HTTP) → Backend Pipeline
+ *
+ * Responsibilities:
+ *   - Conversation lifecycle: create, persist, reset
+ *   - Message state: optimistic user message → confirmed response
+ *   - Pipeline metadata: stage, readiness, warnings, improvements
+ *   - Specification: populated when backend pipeline is complete
+ *   - Clarification: question, options, answer submission
+ *   - Error handling: graceful fallback messages
+ */
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { conversationApi } from '@/services/api/conversation.api';
 import type {
-  ChatMessage,
-  IntentDetectionResult,
-  ExtractedRequirements,
-  ClarificationQuestion,
-  ThinkingStage,
-  ThinkingStageInfo,
-  AgentSpecification,
-  ReadinessChecklist,
-  EditHistoryEntry,
-} from '../types';
+  ProcessMessageResponse,
+  AgentSpecificationData,
+} from '@/services/api/conversation.api';
 
-export const THINKING_STAGES_LIST: ThinkingStageInfo[] = [
-  { key: 'understanding', label: 'Understanding your goal...', detail: 'Reading what you want your AI Agent to accomplish' },
-  { key: 'analyzing', label: 'Planning agent tasks...', detail: 'Listing automated steps and rules for your agent' },
-  { key: 'identifying_missing', label: 'Checking needed connections...', detail: 'Finding which apps or login keys are required' },
-  { key: 'selecting_integrations', label: 'Connecting your apps...', detail: 'Linking tools like Zendesk, Gmail, Slack, & Google Drive' },
-  { key: 'designing_agent', label: 'Building your AI Agent...', detail: 'Setting tone of voice, instructions, and safety rules' },
-  { key: 'preparing_deployment', label: 'Getting ready to launch...', detail: 'Testing safety controls and 1-click launch readiness' },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const DEFAULT_INTENT: IntentDetectionResult = {
-  primaryIntent: 'Pending User Prompt',
-  businessDomain: 'General Automation',
-  expectedGoal: 'Describe an AI agent requirement to start design',
-  expectedOutcome: 'Automated workflow ready for deployment',
-  confidenceScore: 0,
+export interface StudioMessage {
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+  timestamp: Date;
+  /** Pipeline stage that produced this message (e.g. 'CLARIFICATION') */
+  stage?: string;
+  /** Ordered clarification options the user can click */
+  options?: string[];
+  /** Risk/conflict warnings from the ConflictService */
+  warnings?: WarningItem[];
+  /** Proactive improvements from the ImprovementService */
+  improvements?: ImprovementItem[];
+  /** Whether this message came with a clarification question */
+  hasQuestion?: boolean;
+  /** The clarification question text */
+  question?: string | null;
+  /** Whether the clarification question has been answered */
+  questionAnswered?: boolean;
+  /** True while we're waiting for API response (optimistic message) */
+  isOptimistic?: boolean;
+}
+
+export interface WarningItem {
+  type: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  title: string;
+  description: string;
+  mitigation: string;
+}
+
+export interface ImprovementItem {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  valueAdd: string;
+}
+
+export interface ReadinessScore {
+  businessUnderstanding: number;
+  requirementCompleteness: number;
+  securityReadiness: number;
+  deploymentReadiness: number;
+  integrationReadiness: number;
+  conversationCompleteness: number;
+  overall: number;
+}
+
+// ─── Pipeline Stage Display Labels ───────────────────────────────────────────
+
+export const PIPELINE_STAGE_LABELS: Record<string, string> = {
+  INTENT_DETECTION: 'Understanding your idea...',
+  REQUIREMENT_GATHERING: 'Identifying requirements...',
+  CLARIFICATION: 'Asking for details...',
+  PLANNING: 'Designing your agent...',
+  SPECIFICATION_GENERATED: 'Agent ready!',
+  ERROR: 'Something went wrong',
 };
 
-const DEFAULT_REQUIREMENTS: ExtractedRequirements = {
-  goal: 'Waiting for prompt...',
-  tasks: [],
-  requiredIntegrations: [],
-  requiredPermissions: [],
-  requiredCapabilities: [],
-  inputs: [],
-  outputs: [],
-  unknownInformation: ['Primary trigger schedule', 'Target destination service'],
+export const PIPELINE_STAGE_STEP: Record<string, number> = {
+  INTENT_DETECTION: 1,
+  REQUIREMENT_GATHERING: 2,
+  CLARIFICATION: 3,
+  PLANNING: 4,
+  SPECIFICATION_GENERATED: 5,
+  ERROR: 0,
 };
 
-const DEFAULT_SPEC: AgentSpecification = {
-  agentName: 'Unconfigured AI Agent',
-  summary: 'Describe what you need in plain English, and your AI Solutions Architect will generate the complete design.',
-  purpose: 'Awaiting architectural specification',
-  responsibilities: ['Awaiting requirements'],
-  capabilities: ['Natural Language Understanding', 'Task Execution'],
-  requiredIntegrations: ['Standard Web APIs'],
-  permissions: ['read:workspace'],
-  memoryStrategy: 'Contextual Session Memory (30-day window)',
-  triggerStrategy: 'On-Demand Webhook / Manual Trigger',
-  expectedInputs: ['Natural language command payload'],
-  expectedOutputs: ['Structured execution summary'],
-  version: 1,
+// ─── Thinking Stages List (for IntelligenceCenterPanel animation) ─────────────
+
+export const THINKING_STAGES_LIST = [
+  { key: 'understanding',          label: 'Understanding Intent',          detail: 'NLP parsing...' },
+  { key: 'analyzing',              label: 'Analyzing Requirements',         detail: 'Extracting needs...' },
+  { key: 'identifying_missing',    label: 'Identifying Gaps',              detail: 'Gap analysis...' },
+  { key: 'selecting_integrations', label: 'Selecting Integrations',        detail: 'Matching APIs...' },
+  { key: 'designing_agent',        label: 'Designing Agent Architecture',  detail: 'Blueprint gen...' },
+  { key: 'preparing_deployment',   label: 'Preparing Deployment',          detail: 'Finalizing spec...' },
+] as const;
+
+// ─── Default State ────────────────────────────────────────────────────────────
+
+const DEFAULT_READINESS: ReadinessScore = {
+  businessUnderstanding: 0,
+  requirementCompleteness: 0,
+  securityReadiness: 0,
+  deploymentReadiness: 0,
+  integrationReadiness: 0,
+  conversationCompleteness: 0,
+  overall: 0,
 };
 
-const DEFAULT_READINESS: ReadinessChecklist = {
-  goalUnderstood: false,
-  requirementsComplete: false,
-  integrationsSelected: false,
-  permissionsIdentified: false,
-  agentDesigned: false,
-  readinessScore: 10,
-  isReady: false,
-};
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useStudioEngine() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [intent, setIntent] = useState<IntentDetectionResult>(DEFAULT_INTENT);
-  const [requirements, setRequirements] = useState<ExtractedRequirements>(DEFAULT_REQUIREMENTS);
-  const [currentStage, setCurrentStage] = useState<ThinkingStage>('idle');
-  const [activeClarification, setActiveClarification] = useState<ClarificationQuestion | null>(null);
-  const [agentSpec, setAgentSpec] = useState<AgentSpecification | null>(null);
-  const [explanationText, setExplanationText] = useState<string>('');
-  const [readiness, setReadiness] = useState<ReadinessChecklist>(DEFAULT_READINESS);
-  const [editHistory, setEditHistory] = useState<EditHistoryEntry[]>([]);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+export interface UseStudioEngineOptions {
+  /** If provided, the hook will immediately send this as the first message after creating the conversation */
+  initialPrompt?: string;
+}
 
-  const activeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+export function useStudioEngine(options: UseStudioEngineOptions = {}) {
+  const { initialPrompt } = options;
 
-  // Helper to run step-by-step thinking animation
-  const runThinkingSequence = (onComplete: () => void) => {
-    setIsProcessing(true);
-    let stageIdx = 0;
-    setCurrentStage(THINKING_STAGES_LIST[0].key);
+  // Core conversation state
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<StudioMessage[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentStage, setCurrentStage] = useState<string>('INTENT_DETECTION');
+  const [readiness, setReadiness] = useState<ReadinessScore>(DEFAULT_READINESS);
+  const [specification, setSpecification] = useState<AgentSpecificationData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
-    const advanceStage = () => {
-      stageIdx++;
-      if (stageIdx < THINKING_STAGES_LIST.length) {
-        setCurrentStage(THINKING_STAGES_LIST[stageIdx].key);
-        activeTimeoutRef.current = setTimeout(advanceStage, 450);
-      } else {
-        setCurrentStage('complete');
-        setIsProcessing(false);
-        onComplete();
-      }
-    };
+  // Ref to prevent double initialization in React StrictMode
+  const initRef = useRef(false);
 
-    activeTimeoutRef.current = setTimeout(advanceStage, 450);
-  };
+  // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  // Process User Input
-  const processUserInput = useCallback(
-    (userInputText: string) => {
-      if (!userInputText.trim() || isProcessing) return;
-
-      const userMsgId = `u-${Date.now()}`;
-      const newMsg: ChatMessage = {
-        id: userMsgId,
-        role: 'user',
-        text: userInputText.trim(),
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, newMsg]);
-      const lower = userInputText.toLowerCase();
-
-      // Check if user is editing an existing specification conversational-style
-      if (agentSpec && (lower.includes('also') || lower.includes('only') || lower.includes('add') || lower.includes('change') || lower.includes('update') || lower.includes('run') || lower.includes('notify'))) {
-        handleConversationalEdit(userInputText);
-        return;
-      }
-
-      // Check for ambiguous prompt needing clarification first
-      const needsEmailClarification = (lower.includes('email') || lower.includes('inbox') || lower.includes('mail')) && !lower.includes('gmail') && !lower.includes('outlook') && !lower.includes('sendgrid');
-      const needsNotificationClarification = (lower.includes('notify') || lower.includes('alert') || lower.includes('digest')) && !lower.includes('slack') && !lower.includes('teams') && !lower.includes('discord');
-
-      if (needsEmailClarification) {
-        runThinkingSequence(() => {
-          const clarificationQ: ClarificationQuestion = {
-            id: `q-${Date.now()}`,
-            question: 'Which email service does your organization use?',
-            category: 'integration',
-            options: [
-              { label: 'Google Gmail', value: 'Google Gmail' },
-              { label: 'Microsoft Outlook', value: 'Microsoft Outlook' },
-              { label: 'Custom SMTP / IMAP', value: 'Custom SMTP' },
-              { label: 'Other Service', value: 'Other' },
-            ],
-          };
-
-          setActiveClarification(clarificationQ);
-          setIntent({
-            primaryIntent: 'Email Automation & Processing',
-            businessDomain: 'Productivity & Communication',
-            expectedGoal: 'Process inbox emails and extract key updates',
-            expectedOutcome: 'Structured email summaries delivered automatically',
-            confidenceScore: 82,
-          });
-
-          setRequirements({
-            goal: 'Monitor and summarize email communications',
-            tasks: ['Connect to mail server', 'Parse incoming unread messages', 'Extract actionable items'],
-            requiredIntegrations: ['Email API (Pending Selection)'],
-            requiredPermissions: ['read:messages'],
-            requiredCapabilities: ['Natural Language Summarization', 'Key Entity Extraction'],
-            inputs: ['User Inbox Feed'],
-            outputs: ['Formatted Executive Digest'],
-            unknownInformation: ['Specific Email Provider'],
-          });
-
-          setReadiness({
-            goalUnderstood: true,
-            requirementsComplete: false,
-            integrationsSelected: false,
-            permissionsIdentified: true,
-            agentDesigned: false,
-            readinessScore: 45,
-            isReady: false,
-          });
-
-          const aiMsg: ChatMessage = {
-            id: `a-${Date.now()}`,
-            role: 'ai',
-            text: "I understand you want to build an email intelligence agent! To tailor the OAuth permissions and integration adapters, could you specify your email provider?",
-            timestamp: new Date(),
-            clarificationQuestion: clarificationQ,
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-        });
-        return;
-      }
-
-      if (needsNotificationClarification) {
-        runThinkingSequence(() => {
-          const clarificationQ: ClarificationQuestion = {
-            id: `q-${Date.now()}`,
-            question: 'Where should your AI Agent deliver reports and notifications?',
-            category: 'integration',
-            options: [
-              { label: 'Slack Channel', value: 'Slack' },
-              { label: 'Microsoft Teams', value: 'Microsoft Teams' },
-              { label: 'Email Digest', value: 'Email Digest' },
-              { label: 'Custom Webhook', value: 'Custom Webhook' },
-            ],
-          };
-
-          setActiveClarification(clarificationQ);
-          setIntent({
-            primaryIntent: 'Automated Alerting & Reporting',
-            businessDomain: 'Team Collaboration',
-            expectedGoal: 'Deliver intelligent updates to target team channels',
-            expectedOutcome: 'Real-time alert dispatch upon key event triggers',
-            confidenceScore: 85,
-          });
-
-          setRequirements({
-            goal: 'Deliver automated reports to team messaging platform',
-            tasks: ['Format digest payload', 'Post update to designated channel'],
-            requiredIntegrations: ['Notification Endpoint (Pending Selection)'],
-            requiredPermissions: ['write:chat_messages'],
-            requiredCapabilities: ['Message Formatting', 'Priority Filtering'],
-            inputs: ['Event Data Stream'],
-            outputs: ['Formatted Team Notification'],
-            unknownInformation: ['Target Messaging Platform'],
-          });
-
-          setReadiness({
-            goalUnderstood: true,
-            requirementsComplete: false,
-            integrationsSelected: false,
-            permissionsIdentified: true,
-            agentDesigned: false,
-            readinessScore: 50,
-            isReady: false,
-          });
-
-          const aiMsg: ChatMessage = {
-            id: `a-${Date.now()}`,
-            role: 'ai',
-            text: "I have mapped out your reporting agent's core logic. Which channel or messaging platform should it send alerts to?",
-            timestamp: new Date(),
-            clarificationQuestion: clarificationQ,
-          };
-          setMessages((prev) => [...prev, aiMsg]);
-        });
-        return;
-      }
-
-      // Full automatic design sequence for specific prompts
-      runThinkingSequence(() => {
-        generateAgentFromPrompt(userInputText);
-      });
-    },
-    [agentSpec, isProcessing]
+  /** Maps the raw API response to a StudioMessage for the assistant */
+  const mapResponseToAiMessage = useCallback(
+    (res: ProcessMessageResponse): StudioMessage => ({
+      id: res.aiMessage.id,
+      role: 'ai',
+      text: res.aiMessage.content,
+      timestamp: new Date(res.aiMessage.createdAt),
+      stage: res.currentStage,
+      options: res.options ?? [],
+      warnings: (res.warnings ?? []) as WarningItem[],
+      improvements: (res.improvements ?? []) as ImprovementItem[],
+      hasQuestion: res.needsClarification,
+      question: res.question,
+      questionAnswered: false,
+    }),
+    []
   );
 
-  // Clarification Answer Handler
-  const handleAnswerClarification = useCallback(
-    (questionId: string, optionValue: string) => {
-      if (activeClarification?.id === questionId) {
-        setActiveClarification((prev) => (prev ? { ...prev, answered: true, selectedOption: optionValue } : null));
+  /** Applies a backend pipeline response to all state slices */
+  const applyResponse = useCallback(
+    (res: ProcessMessageResponse) => {
+      setCurrentStage(res.currentStage);
+
+      if (res.readiness) {
+        setReadiness(res.readiness as ReadinessScore);
       }
 
-      const answerMsgId = `u-ans-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: answerMsgId,
+      if (res.specification) {
+        setSpecification(res.specification);
+      }
+
+      const aiMsg = mapResponseToAiMessage(res);
+
+      setMessages((prev) => {
+        // Replace the optimistic user message with the confirmed one, then append AI message
+        const withoutOptimistic = prev.filter((m) => !m.isOptimistic);
+        const confirmedUser: StudioMessage = {
+          id: res.userMessage.id,
           role: 'user',
-          text: `Selected option: ${optionValue}`,
-          timestamp: new Date(),
-        },
-      ]);
-
-      // Resume thinking and build spec automatically
-      runThinkingSequence(() => {
-        const fullPrompt = `${messages[0]?.text || 'Email agent'} using ${optionValue}`;
-        generateAgentFromPrompt(fullPrompt);
-        setActiveClarification(null);
+          text: res.userMessage.content,
+          timestamp: new Date(res.userMessage.createdAt),
+        };
+        return [...withoutOptimistic, confirmedUser, aiMsg];
       });
     },
-    [activeClarification, messages]
+    [mapResponseToAiMessage]
   );
 
-  // Conversational Editing Handler (Step 7)
-  const handleConversationalEdit = (editPrompt: string) => {
-    runThinkingSequence(() => {
-      if (!agentSpec) return;
-      const lower = editPrompt.toLowerCase();
-      const newIntegrations = [...agentSpec.requiredIntegrations];
-      const newPermissions = [...agentSpec.permissions];
-      const newResponsibilities = [...agentSpec.responsibilities];
-      let newTrigger = agentSpec.triggerStrategy;
+  // ─── Initialize: Create Conversation + Optional First Message ───────────────
 
-      if (lower.includes('teams') && !newIntegrations.includes('Microsoft Teams')) {
-        newIntegrations.push('Microsoft Teams API');
-        newPermissions.push('chat:write:teams');
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
+    let isMounted = true;
+
+    async function initialize() {
+      try {
+        setIsInitializing(true);
+        setError(null);
+
+        const title = initialPrompt?.slice(0, 50) || 'New AI Agent Session';
+        const conv = await conversationApi.createConversation(title);
+
+        if (!isMounted) return;
+        setConversationId(conv.id);
+
+        if (initialPrompt?.trim()) {
+          // Optimistic user message
+          const optimisticUser: StudioMessage = {
+            id: `opt-${Date.now()}`,
+            role: 'user',
+            text: initialPrompt,
+            timestamp: new Date(),
+            isOptimistic: true,
+          };
+          setMessages([optimisticUser]);
+          setIsProcessing(true);
+
+          const res = await conversationApi.sendMessage(conv.id, initialPrompt);
+          if (!isMounted) return;
+          applyResponse(res);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err?.message ?? 'Failed to initialize conversation');
+        }
+      } finally {
+        if (isMounted) {
+          setIsProcessing(false);
+          setIsInitializing(false);
+        }
       }
-      if (lower.includes('slack') && !newIntegrations.includes('Slack Webhook')) {
-        newIntegrations.push('Slack Webhook');
-        newPermissions.push('channels:write:slack');
-      }
-      if (lower.includes('jira') && !newIntegrations.includes('Jira REST API')) {
-        newIntegrations.push('Jira REST API');
-        newPermissions.push('read:jira_issues');
-      }
-      if (lower.includes('unread')) {
-        newResponsibilities.push('Filter out already read items to maintain zero clutter');
-      }
-      if (lower.includes('weekday')) {
-        newTrigger = 'Cron Schedule (Every Weekday at 09:00 AM UTC)';
-      } else if (lower.includes('hourly')) {
-        newTrigger = 'Cron Schedule (Every Hour, 24/7)';
-      }
-
-      const updatedSpec: AgentSpecification = {
-        ...agentSpec,
-        requiredIntegrations: newIntegrations,
-        permissions: newPermissions,
-        responsibilities: newResponsibilities,
-        triggerStrategy: newTrigger,
-        version: agentSpec.version + 1,
-      };
-
-      setAgentSpec(updatedSpec);
-
-      const editEntry: EditHistoryEntry = {
-        id: `edit-${Date.now()}`,
-        timestamp: new Date(),
-        instruction: editPrompt,
-        changeSummary: `Updated specification (v${updatedSpec.version}): adjusted integrations & triggers based on feedback.`,
-      };
-      setEditHistory((prev) => [editEntry, ...prev]);
-
-      const simpleExplanation = `Your updated AI Agent will now execute on a ${newTrigger.toLowerCase()}, connecting with ${newIntegrations.join(', ')}. It ensures all permissions (${newPermissions.slice(0, 3).join(', ')}) are strictly respected.`;
-      setExplanationText(simpleExplanation);
-
-      const aiMsg: ChatMessage = {
-        id: `a-edit-${Date.now()}`,
-        role: 'ai',
-        text: `I've updated your AI Agent design! ${simpleExplanation}`,
-        timestamp: new Date(),
-        explanationText: simpleExplanation,
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    });
-  };
-
-  // Generate Agent Spec based on domain matching
-  const generateAgentFromPrompt = (promptText: string) => {
-    const lower = promptText.toLowerCase();
-
-    let domain = 'Productivity & Automation';
-    let intentTitle = 'Executive Summary & Alert Agent';
-    let agentName = 'AI Executive Digest & Alert Agent';
-    let summary = 'Monitors key communication streams, summarizes critical information, and delivers prioritized digests.';
-    let purpose = 'Eliminate manual daily research and communication overload through autonomous AI summarization.';
-    let responsibilities = [
-      'Fetch unread inbox messages and communication channels every morning.',
-      'Analyze message sentiment, importance, and pending action items.',
-      'Generate bulleted executive summaries with direct action links.',
-      'Deliver digest report directly to target team chat channels.',
-    ];
-    let capabilities = ['Natural Language Summarization', 'Action Item Extraction', 'Multi-channel Dispatch', 'Entity Recognition'];
-    let integrations = ['Google Gmail API', 'Slack Webhook', 'Notion Workspace API'];
-    let permissions = ['read:gmail_messages', 'send:slack_chat', 'write:notion_database'];
-    let memoryStrategy = 'Short-term Contextual Buffer + Pinecone Vector Memory (30-day retention)';
-    let triggerStrategy = 'Cron Schedule (Every Monday-Friday at 09:00 AM UTC)';
-    let inputs = ['Gmail Inbox Feed', 'Notion Task Board'];
-    let outputs = ['Slack Channel Report', 'Notion Summary Page'];
-
-    if (lower.includes('github') || lower.includes('jira') || lower.includes('pr') || lower.includes('code')) {
-      domain = 'Software Engineering & DevOps';
-      intentTitle = 'Automated PR & Code Review Guardian';
-      agentName = 'GitHub & Jira Engineering Assistant';
-      summary = 'Monitors pull requests, performs automated security & style checks, and syncs sprint progress to Jira.';
-      purpose = 'Accelerate code reviews and maintain clean Jira ticket synchronization without developer friction.';
-      responsibilities = [
-        'Scan incoming pull requests for security vulnerabilities and style diffs.',
-        'Post inline review comments and summary feedback on GitHub PRs.',
-        'Transition corresponding Jira issues to "In Review" or "Done" state.',
-        'Alert technical lead on Slack when critical blocking bugs are detected.',
-      ];
-      capabilities = ['Static Code Analysis', 'Diff Parsing', 'Jira Issue Automation', 'Security Linting'];
-      integrations = ['GitHub App Webhook', 'Jira REST API', 'Slack Developer Channel'];
-      permissions = ['read:github_prs', 'write:github_comments', 'write:jira_status'];
-      memoryStrategy = 'Repository State Cache (Redis) + Vector DB for past PR reviews';
-      triggerStrategy = 'Real-time Webhook Event (`pull_request.opened`, `pull_request.synchronize`)';
-      inputs = ['GitHub Pull Request Diff Payload', 'Jira Ticket Metadata'];
-      outputs = ['GitHub Review Comment', 'Updated Jira Ticket State', 'Slack Security Alert'];
-    } else if (lower.includes('customer') || lower.includes('support') || lower.includes('ticket') || lower.includes('zendesk')) {
-      domain = 'Customer Experience & Support';
-      intentTitle = 'Autonomous Support Triager';
-      agentName = 'AI Customer Support Triager & Resolver';
-      summary = 'Categorizes incoming support tickets, drafts intelligent responses, and escalates urgent issues.';
-      purpose = 'Reduce customer support response times by automatically handling routine inquiries and triaging tickets.';
-      responsibilities = [
-        'Ingest customer support tickets from Zendesk and email.',
-        'Perform sentiment analysis and priority assignment (P1-P4).',
-        'Draft context-aware solutions using company knowledge base articles.',
-        'Escalate high-priority or dissatisfied customer tickets directly to lead agents.',
-      ];
-      capabilities = ['Sentiment Analysis', 'Knowledge Base Search', 'Ticket Categorization', 'Response Drafting'];
-      integrations = ['Zendesk API', 'Pinecone Vector Knowledge Base', 'Intercom Chat'];
-      permissions = ['read:zendesk_tickets', 'write:zendesk_replies', 'read:knowledge_base'];
-      memoryStrategy = 'Customer Interaction Timeline Memory + RAG Vector Store';
-      triggerStrategy = 'Real-time Webhook Event (`ticket.created`)';
-      inputs = ['Customer Support Ticket Payload', 'Knowledge Base Docs'];
-      outputs = ['Drafted Support Resolution', 'Ticket Priority Tag', 'Escalation Alert'];
     }
 
-    const detectedIntent: IntentDetectionResult = {
-      primaryIntent: intentTitle,
-      businessDomain: domain,
-      expectedGoal: purpose,
-      expectedOutcome: summary,
-      confidenceScore: 96,
+    initialize();
+
+    return () => {
+      isMounted = false;
     };
+  }, []); // Intentionally empty — run once on mount
 
-    const extractedReqs: ExtractedRequirements = {
-      goal: purpose,
-      tasks: responsibilities,
-      requiredIntegrations: integrations,
-      requiredPermissions: permissions,
-      requiredCapabilities: capabilities,
-      inputs: inputs,
-      outputs: outputs,
-      unknownInformation: [],
-    };
+  // ─── sendMessage: Core user input handler ───────────────────────────────────
 
-    const generatedSpec: AgentSpecification = {
-      agentName,
-      summary,
-      purpose,
-      responsibilities,
-      capabilities,
-      requiredIntegrations: integrations,
-      permissions,
-      memoryStrategy,
-      triggerStrategy,
-      expectedInputs: inputs,
-      expectedOutputs: outputs,
-      version: 1,
-    };
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || isProcessing) return;
 
-    const fullReadiness: ReadinessChecklist = {
-      goalUnderstood: true,
-      requirementsComplete: true,
-      integrationsSelected: true,
-      permissionsIdentified: true,
-      agentDesigned: true,
-      readinessScore: 100,
-      isReady: true,
-    };
+      setError(null);
 
-    const simpleExplanation = `Your ${agentName} will run on a ${triggerStrategy.toLowerCase()}. It connects to ${integrations.join(', ')} to automatically perform tasks like ${responsibilities[0].toLowerCase()}, giving you peace of mind with full security scoping (${permissions[0]}).`;
+      // Ensure we have a conversation (should always exist after init)
+      let cid = conversationId;
+      if (!cid) {
+        try {
+          const conv = await conversationApi.createConversation('New AI Agent Session');
+          setConversationId(conv.id);
+          cid = conv.id;
+        } catch (err: any) {
+          setError(err?.message ?? 'Failed to create conversation');
+          return;
+        }
+      }
 
-    setIntent(detectedIntent);
-    setRequirements(extractedReqs);
-    setAgentSpec(generatedSpec);
-    setReadiness(fullReadiness);
-    setExplanationText(simpleExplanation);
+      // Optimistic: immediately show user message in UI
+      const optimisticId = `opt-${Date.now()}`;
+      const optimisticMsg: StudioMessage = {
+        id: optimisticId,
+        role: 'user',
+        text: trimmed,
+        timestamp: new Date(),
+        isOptimistic: true,
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setIsProcessing(true);
 
-    const aiMsg: ChatMessage = {
-      id: `a-gen-${Date.now()}`,
-      role: 'ai',
-      text: `I've designed your **${agentName}**! Here is a simple overview of what it does:\n\n"${simpleExplanation}"\n\nYou can review the complete specification on the right panel, ask me to make any tweaks, or deploy it immediately.`,
-      timestamp: new Date(),
-      explanationText: simpleExplanation,
-    };
+      try {
+        let res: ProcessMessageResponse;
+        try {
+          res = await conversationApi.sendMessage(cid, trimmed);
+        } catch (apiErr: any) {
+          const isNotFound = apiErr?.response?.status === 404 || apiErr?.message?.toLowerCase().includes('not found');
+          if (isNotFound) {
+            // Auto-recovery: create new conversation and retry
+            const newConv = await conversationApi.createConversation(trimmed.slice(0, 50) || 'New AI Agent Session');
+            setConversationId(newConv.id);
+            res = await conversationApi.sendMessage(newConv.id, trimmed);
+          } else {
+            throw apiErr;
+          }
+        }
 
-    setMessages((prev) => [...prev, aiMsg]);
-  };
+        // Mark previous clarification question as answered
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.hasQuestion && !m.questionAnswered ? { ...m, questionAnswered: true } : m
+          )
+        );
 
-  const resetEngine = useCallback(() => {
-    if (activeTimeoutRef.current) clearTimeout(activeTimeoutRef.current);
+        applyResponse(res);
+      } catch (err: any) {
+        // Remove optimistic message on failure and show error bubble
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== optimisticId),
+          {
+            id: `err-${Date.now()}`,
+            role: 'ai',
+            text: `⚠️ ${err?.message ?? 'Something went wrong. Please try again.'}`,
+            timestamp: new Date(),
+          },
+        ]);
+        setError(err?.message ?? 'Unknown error');
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [conversationId, isProcessing, applyResponse]
+  );
+
+  // ─── answerClarification: User clicks an option chip ────────────────────────
+
+  const answerClarification = useCallback(
+    (questionMessageId: string, optionValue: string) => {
+      // Mark question as answered in the message
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === questionMessageId ? { ...m, questionAnswered: true } : m
+        )
+      );
+      // Send the selected option as a regular message
+      sendMessage(optionValue);
+    },
+    [sendMessage]
+  );
+
+  // ─── resetConversation: Start fresh ─────────────────────────────────────────
+
+  const resetConversation = useCallback(async () => {
+    initRef.current = false;
     setMessages([]);
-    setIntent(DEFAULT_INTENT);
-    setRequirements(DEFAULT_REQUIREMENTS);
-    setCurrentStage('idle');
-    setActiveClarification(null);
-    setAgentSpec(null);
-    setExplanationText('');
+    setConversationId(null);
+    setCurrentStage('INTENT_DETECTION');
     setReadiness(DEFAULT_READINESS);
-    setEditHistory([]);
+    setSpecification(null);
+    setError(null);
     setIsProcessing(false);
+    setIsInitializing(true);
+
+    // Create a fresh conversation
+    try {
+      const conv = await conversationApi.createConversation('New AI Agent Session');
+      setConversationId(conv.id);
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to reset conversation');
+    } finally {
+      setIsInitializing(false);
+    }
   }, []);
 
+  // ─── Derived state ────────────────────────────────────────────────────────
+
+  const currentStepNumber = PIPELINE_STAGE_STEP[currentStage] ?? 1;
+  const stageLabel = PIPELINE_STAGE_LABELS[currentStage] ?? 'Processing...';
+  const isComplete = currentStage === 'SPECIFICATION_GENERATED';
+
+  // Pending clarification: last AI message that has an unanswered question
+  const pendingClarification = messages
+    .filter((m) => m.role === 'ai' && m.hasQuestion && !m.questionAnswered)
+    .at(-1) ?? null;
+
   return {
+    // State
+    conversationId,
     messages,
-    intent,
-    requirements,
-    currentStage,
-    activeClarification,
-    agentSpec,
-    explanationText,
-    readiness,
-    editHistory,
     isProcessing,
-    processUserInput,
-    handleAnswerClarification,
-    resetEngine,
+    isInitializing,
+    currentStage,
+    currentStepNumber,
+    stageLabel,
+    readiness,
+    specification,
+    isComplete,
+    error,
+    pendingClarification,
+    // Actions
+    sendMessage,
+    answerClarification,
+    resetConversation,
   };
 }

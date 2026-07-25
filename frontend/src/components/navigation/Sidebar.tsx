@@ -35,29 +35,12 @@ export function Sidebar() {
       icon: Store,
       route: ROUTES.MARKETPLACE,
     },
-    {
-      id: "workflows",
-      label: "Workflows",
-      icon: Activity,
-      route: ROUTES.WORKFLOWS,
-    },
-    {
-      id: "blueprint",
-      label: "Blueprint & Specs",
-      icon: Sparkles,
-      route: ROUTES.BLUEPRINT,
-    },
+
     {
       id: "integrations",
       label: "Integrations",
       icon: Layers,
       route: ROUTES.INTEGRATIONS,
-    },
-    {
-      id: "knowledge",
-      label: "Knowledge",
-      icon: BookOpen,
-      route: ROUTES.KNOWLEDGE,
     },
     {
       id: "analytics",
@@ -89,12 +72,11 @@ export function Sidebar() {
           className="flex items-center gap-2.5 px-2 py-1 cursor-pointer"
           onClick={() => navigate(ROUTES.DASHBOARD)}
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-violet-500/20">
-            <Zap className="h-4.5 w-4.5 fill-current" />
-          </div>
-          <span className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Vibe Agents
-          </span>
+          <img
+            src="/vibe-logo-full.png"
+            alt="Vibe Agents"
+            className="h-8 object-contain"
+          />
         </div>
 
         {/* Navigation Links */}
