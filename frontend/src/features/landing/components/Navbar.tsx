@@ -31,12 +31,11 @@ export function Navbar() {
             to={ROUTES.HOME} 
             className="flex items-center gap-2.5 group"
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-violet-500/20 group-hover:scale-105 transition-transform">
-              <Zap className="h-4.5 w-4.5 fill-current" />
-            </div>
-            <span className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Vibe Agents
-            </span>
+            <img 
+              src="/vibe-logo-full.png" 
+              alt="Vibe Agents" 
+              className="h-8 object-contain group-hover:scale-105 transition-transform" 
+            />
           </Link>
 
           {/* Desktop Navigation */}

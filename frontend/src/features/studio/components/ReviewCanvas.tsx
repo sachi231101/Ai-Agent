@@ -32,14 +32,12 @@ export function ReviewCanvas({ onBackToBuild, onNextToTest, agentName = 'Email S
         
         {/* Left Title & Status */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-violet-500/20">
-            <Zap className="h-4.5 w-4.5 fill-current" />
-          </div>
+          <img src="/vibe-logo-icon.png" alt="Vibe Agents" className="w-8 h-8 object-contain drop-shadow-sm" />
 
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-                AI Agent Studio
+                Vibe Agent Studio
               </h1>
               <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold">
                 Draft

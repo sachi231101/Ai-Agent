@@ -9,9 +9,21 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  server: {
+    sourcemapIgnoreList: false,
+  },
+  build: {
+    sourcemap: true,
+  },
+  css: {
+    devSourcemap: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
 })
+
+
+

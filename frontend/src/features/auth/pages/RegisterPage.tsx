@@ -70,12 +70,11 @@ export default function RegisterPage() {
         <div className="relative z-10 space-y-8">
           {/* Logo */}
           <Link to={ROUTES.HOME} className="flex items-center gap-2.5 group w-fit">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-violet-500/25 group-hover:scale-105 transition-transform">
-              <Zap className="h-5 w-5 fill-current" />
-            </div>
-            <span className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Vibe Agents
-            </span>
+            <img 
+              src="/vibe-logo-full.png" 
+              alt="Vibe Agents" 
+              className="h-9 object-contain group-hover:scale-105 transition-transform" 
+            />
           </Link>
 
           {/* Heading */}
