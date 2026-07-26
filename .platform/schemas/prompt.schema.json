@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt",
+  "description": "JSON Schema contract for Vibe Agents Prompt",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique record identifier"
+    },
+    "tenantId": {
+      "type": "string",
+      "description": "Multi-tenant isolation key"
+    },
+    "version": {
+      "type": "string",
+      "default": "1.0.0"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "id",
+    "tenantId",
+    "version"
+  ]
+}
